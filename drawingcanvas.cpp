@@ -5,10 +5,43 @@ DrawingCanvas::DrawingCanvas(QWidget *parent)  {
     setMinimumSize(this->WINDOW_WIDTH, this->WINDOW_HEIGHT);
     // Set a solid background color
     setStyleSheet("background-color: white; border: 1px solid gray;");
+
+    //Ideal Pattern Horizontal
+    bool horizontal_line[3][3] = {
+        {0, 0, 0},
+        {1, 1, 1},
+        {0, 0, 0}
+    };
+    m_ideal_patterns.append(CustomMatrix(horizontal_line));
+
+    //Ideal Pattern Vertical
+    bool vertical_line[3][3] = {
+        {0, 1, 0},
+        {0, 1, 0},
+        {0, 1, 0}
+    };
+    m_ideal_patterns.append(CustomMatrix(vertical_line));
+
+    // Ideal Pattern Diagonal from top-left to bottom-right
+    bool diagonal_tl_br[3][3] = {
+        {1, 0, 0},
+        {0, 1, 0},
+        {0, 0, 1}
+    };
+    m_ideal_patterns.append(CustomMatrix(diagonal_tl_br));
+
+    // Ideal Pattern Diagonal from top-right to bottom-left
+    bool diagonal_tr_bl[3][3] = {
+        {0, 0, 1},
+        {0, 1, 0},
+        {1, 0, 0}
+    };
+    m_ideal_patterns.append(CustomMatrix(diagonal_tr_bl));
 }
 
 void DrawingCanvas::clearPoints(){
     m_points.clear();
+    m_drawLinesEnabled = false;
     // Trigger a repaint to clear the canvas
     update();
 }
@@ -18,37 +51,49 @@ void DrawingCanvas::paintLines(){
      * Implement lines drawing per even pair
     */
 
-    isPaintLinesClicked = true;
+    m_drawLinesEnabled = true;
     update();
 }
 
 void DrawingCanvas::segmentDetection(){
-    QPixmap pixmap = this->grab(); //
+    m_detected_candidates.clear();
+
+    QPixmap pixmap(this->size());
+    this->render(&pixmap);
     QImage image = pixmap.toImage();
 
-    cout << "image width " << image.width() << endl;
-    cout << "image height " << image.height() << endl;
+    cout << "--- Starting Segment Detection ---" << endl;
+    cout << "Image size: " << image.width() << "x" << image.height() << endl;
 
-    //To not crash we set initial size of the matrix
-    vector<CustomMatrix> windows(image.width()*image.height());
-
-    // Get the pixel value as an ARGB integer (QRgb is a typedef for unsigned int)
-    for(int i = 1; i < image.width()-1;i++){
-        for(int j = 1; j < image.height()-1;j++){
+    for(int i = 1; i < image.width() - 1; i++){
+        for(int j = 1; j < image.height() - 1; j++){
             bool local_window[3][3] = {false};
+            bool is_window_empty = true;
 
-            for(int m=-1;m<=1;m++){
-                for(int n=-1;n<=1;n++){
-                    QRgb rgbValue = image.pixel(i+m, j+n);
-                    local_window[m+1][n+1] = (rgbValue != 0xffffffff);
+            // Create the 3x3 window centered at (i, j)
+            for(int m = -1; m <= 1; m++){
+                for(int n = -1; n <= 1; n++){
+                    QRgb rgbValue = image.pixel(i + m, j + n);
+                    if (rgbValue != 0xffffffff) {
+                        local_window[m + 1][n + 1] = true;
+                        is_window_empty = false;
+                    }
                 }
             }
-
-            CustomMatrix mat(local_window);
-
-            windows.push_back(mat);
+            if (!is_window_empty) {
+                cout << "Found non-empty window at (" << i << ", " << j << "):" << endl;
+                for (int row = 0; row < 3; ++row) {
+                    for (int col = 0; col < 3; ++col) {
+                        cout << (local_window[row][col] ? "1" : "0") << " ";
+                    }
+                    cout << endl;
+                }
+                cout << "--------------------" << endl;
+            }
         }
     }
+    cout << "--- Detection Finished ---" << endl;
+    update();
     return;
 }
 
@@ -66,25 +111,30 @@ void DrawingCanvas::paintEvent(QPaintEvent *event){
         painter.drawEllipse(point, 3, 3);
     }
 
-    if(isPaintLinesClicked){
+    if(m_drawLinesEnabled){
         cout << "paint lines block is called" << endl;
         pen.setColor(Qt::red);
-        pen.setWidth(4); // 4-pixel wide line
-        pen.setStyle(Qt::SolidLine);
+        pen.setWidth(4);
         painter.setPen(pen);
 
-        // Set the painter's pen to our custom pen.
-        painter.setPen(pen);
-
-        for(int i=0;i<m_points.size()-1;i+=2){
-            //cout << m_points[i].x() << endl;
+        for(int i=0; i < m_points.size() - 1; i += 2){
             painter.drawLine(m_points[i], m_points[i+1]);
         }
-        isPaintLinesClicked = false;
 
-        //return painter pen to blue
         pen.setColor(Qt::blue);
         painter.setPen(pen);
+    }
+    if (!m_detected_candidates.isEmpty()) {
+        QPen purplePen(QColor("purple"), 2);
+        painter.setPen(purplePen);
+        painter.setPen(purplePen);
+        painter.setBrush(Qt::NoBrush);
+
+        for (const QPoint& candidate_pos : std::as_const(m_detected_candidates)) {
+            // Draw a 3x3 rectangle at the candidate's position.
+            // The coordinate (i,j) was the center, so we offset by -1.
+            painter.drawRect(candidate_pos.x() - 1, candidate_pos.y() - 1, 3, 3);
+        }
     }
 }
 

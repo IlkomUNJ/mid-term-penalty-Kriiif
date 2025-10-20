@@ -40,7 +40,8 @@ protected:
 private:
     // A vector to store all the points drawn by the user
     QVector<QPoint> m_points;
-
-    bool isPaintLinesClicked = false;
+    QVector<CustomMatrix> m_ideal_patterns;
+    QVector<QPoint> m_detected_candidates;
+    bool m_drawLinesEnabled = false;
 };
 #endif // DRAWINGCANVAS_H
